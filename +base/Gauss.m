@@ -1,11 +1,16 @@
 function [X, Y, Z] = Gauss(lat, lon, height, varargin)
-% GAUSS - 将 WGS84 经纬度（高度）投影至高斯-克吕格平面坐标
+% GAUSS - 将 WGS84 经纬度（高度）投影至高斯-克吕格平面坐标 (东北天 ENU)
+%
+% 坐标定义:
+%    X: 东偏移 (Eastings)
+%    Y: 北偏移 (Northings)
+%    Z: 天向高度 (Up/Height)
 %
 % 调用格式:
-%   [X, Y] = base.Gauss(lat, lon, [])          % 仅经纬度输入
-%   [X, Y, Z] = base.Gauss(lat, lon, alt)      % 经纬高输入
-%   [...] = base.Gauss(..., 'ZoneWidth', 3)    % 指定3度带 (默认6度)
-%   [...] = base.Gauss(..., 'L0', 120.5)       % 强制指定中央子午线
+%    [X, Y] = Gauss(lat, lon, [])            % 仅经纬度输入
+%    [X, Y, Z] = Gauss(lat, lon, alt)        % 经纬高输入
+%    [...] = Gauss(..., 'ZoneWidth', 3)      % 指定3度带 (默认6度)
+%    [...] = Gauss(..., 'L0', 120.5)         % 强制指定中央子午线
 
     % 1. 参数解析
     p = inputParser;
@@ -41,7 +46,7 @@ function [X, Y, Z] = Gauss(lat, lon, height, varargin)
         L0 = p.Results.L0;
     end
 
-    % 4. 投影计算
+    % 4. 投影准备计算
     radLat = deg2rad(B);
     radLon = deg2rad(L);
     radL0 = deg2rad(L0);
@@ -53,7 +58,7 @@ function [X, Y, Z] = Gauss(lat, lon, height, varargin)
     eta2 = ep2 * cosB.^2;
     N = a ./ sqrt(1 - e2 * sinB.^2); % 卯酉圈曲率半径
 
-    % 计算子午弧长 X_arc
+    % 计算子午弧长 (对应北向距离的基准)
     A1 = 1 + 3/4*e2 + 45/64*e2^2 + 175/256*e2^3;
     B1 = 3/4*e2 + 15/16*e2^2 + 525/512*e2^3;
     C1 = 15/64*e2^2 + 105/256*e2^3;
@@ -61,22 +66,26 @@ function [X, Y, Z] = Gauss(lat, lon, height, varargin)
     
     X_arc = a * (1-e2) * (A1*radLat - B1/2*sin(2*radLat) + C1/4*sin(4*radLat) - D1/6*sin(6*radLat));
 
-    % 平面坐标计算
-    X = X_arc + N.*t.*cosB.^2.*dL.^2/2 + ...
+    % 5. 平面坐标计算
+    % 计算北向偏移 (Northings)
+    North = X_arc + N.*t.*cosB.^2.*dL.^2/2 + ...
         N.*t.*cosB.^4.*(5 - t.^2 + 9*eta2 + 4*eta2.^2).*dL.^4/24 + ...
         N.*t.*cosB.^6.*(61 - 58*t.^2 + t.^4).*dL.^6/720;
 
-    Y = N.*cosB.*dL + ...
+    % 计算东向偏移 (Eastings)
+    East = N.*cosB.*dL + ...
         N.*cosB.^3.*(1 - t.^2 + eta2).*dL.^3/6 + ...
         N.*cosB.^5.*(5 - 18*t.^2 + t.^4 + 14*eta2 - 58*t.^2.*eta2).*dL.^5/120;
 
-    % 5. 坐标加偏 (通常东向加 500000 避免负数)
-    Y = Y + 500000;
+    % 6. 坐标加偏与输出赋值
+    X = East + 500000; % 对应东北天坐标系的 X (Easting)，加500km偏置避免负数
+    Y = North;         % 对应东北天坐标系的 Y (Northing)
     
-    % 6. 处理高度
+    % 7. 处理高度
     if isempty(H)
         Z = zeros(size(X));
     else
         Z = H;
     end
 end
+

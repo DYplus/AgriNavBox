@@ -1,48 +1,23 @@
-%% AgriNavBox 极速处理流程
-clear; clc; tic;
+%% AgriNavBox IMU 零偏处理流程
+% 1. 设置文件路径
+dataDir = 'Data'; % 根据截图，数据在 Data 文件夹下
+fileName = '静止数据.xlsx';
+fullPath = fullfile(dataDir, fileName);
 
-% 1. 调用解析函数
-% 确保 Data/14_054539.txt 路径正确
-g_data = io.getLogFromBin('Data/9.txt', 'false');
+% 2. 提取数据 (假设前 500 行是完全静止的)
+% 读取 13-15 列: XYZ轴角速度 (Gyro)
+% 读取 16-18 列: XYZ轴加速度 (Acc)
+staticRange = 'M200:R2000'; % M-O列是13-15, P-R列是16-18
+imuStatic = readmatrix(fullPath, 'Range', staticRange);
 
-data = g_data(10000:15000, :);
+gyroData = imuStatic(:, 1:3); % 对应原表的 13, 14, 15 列
+accData  = imuStatic(:, 4:6); % 对应原表的 16, 17, 18 列
 
-% 2. 验证解析是否成功
-if isempty(data) || height(data) == 0
-    error('解析结果为空，请检查 getLogFromBin 中的年份过滤逻辑或同步头偏移。');
-else
-    fprintf('解析成功，共获取 %d 帧轨迹点。\n', height(data));
-end
+% 3. 调用工具箱函数计算零偏
+[gb, gbStd] = base.ImuGyroBias(gyroData);
+[ab, abStd] = base.ImuAccBias(accData);
 
-% 3. 绘制图形
-figure('Color', 'w'); % 强制打开一个新窗口
-plot(data.lon, data.lat, 'LineWidth', 1.5);
-hold on;
-% 标出起点（绿）和终点（红）
-plot(data.lon(1), data.lat(1), 'go', 'MarkerSize', 10, 'MarkerFaceColor', 'g');
-plot(data.lon(end), data.lat(end), 'ro', 'MarkerSize', 10, 'MarkerFaceColor', 'r');
-
-grid on;
-axis equal; % 保持经纬度比例正常
-xlabel('Longitude (deg)');
-ylabel('Latitude (deg)');
-title('由二进制流解析生成的实时轨迹');
-% 2. 截取 10000 到 15000 行
-subData = g_data(10000:15000, :);
-
-% 3. 调用高斯投影 (默认3度带)
-[gx, gy, gz] = base.Gauss(subData.lat, subData.lon, []);
-
-% 4. 存回表格进行后续处理
-subData.gx = gx;
-subData.gy = gy;
-subData.gz = gz;
-
-% 可视化测试
-figure;
-plot(subData.gy, subData.gx, 'LineWidth', 1.5);
-axis equal; grid on;
-xlabel('East (m)'); ylabel('North (m)');
-title('高斯投影平面轨迹 (3度带)');
-
-toc;
+% 4. 打印结果
+fprintf('---- 静止零偏估计结果 ----\n');
+fprintf('陀螺仪零偏 (X,Y,Z): [%.6f, %.6f, %.6f]\n', gb);
+fprintf('加速度零偏 (X,Y,Z): [%.6f, %.6f, %.6f]\n', ab);
